@@ -189,5 +189,8 @@ router.addHandler(
       applicationLink, // External or same-page URL after click
       jobDescription,
     });
+
+    // close all pages
+    await page.context().close();
   }
 );

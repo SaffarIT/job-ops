@@ -42,7 +42,7 @@ const crawler = new PlaywrightCrawler({
   maxRequestsPerCrawl: 2000,
   // Add delay between requests to slow down the process
   minConcurrency: 1,
-  maxConcurrency: 1,
+  maxConcurrency: 5,
   navigationTimeoutSecs: 60,
   // Add delay between requests (in milliseconds)
   requestHandlerTimeoutSecs: 100,
