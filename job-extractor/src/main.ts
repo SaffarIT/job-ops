@@ -39,10 +39,10 @@ const crawler = new PlaywrightCrawler({
   // proxyConfiguration: new ProxyConfiguration({ proxyUrls: ['...'] }),
   requestHandler: router,
   // Comment this option to scrape the full website.
-  maxRequestsPerCrawl: 2000,
+  // maxRequestsPerCrawl: 2000,
   // Add delay between requests to slow down the process
   minConcurrency: 1,
-  maxConcurrency: 5,
+  maxConcurrency: 2,
   navigationTimeoutSecs: 60,
   // Add delay between requests (in milliseconds)
   requestHandlerTimeoutSecs: 100,

@@ -150,34 +150,79 @@ router.addHandler(
     const hasApplyButton = (await applyButton.count()) > 0;
 
     let applicationLink: string | null = null;
+    let spawnedPage: typeof page | null = null;
 
     if (hasApplyButton) {
-      const context = page.context();
       const originalUrl = page.url();
 
-      // Race the click with "a new page opened" event.
-      // If it opens in the same tab, waitForEvent('page') will just time out and we fallback.
-      const [maybeNewPage] = await Promise.all([
-        context.waitForEvent("page").catch(() => null),
-        applyButton.click(),
-      ]);
+      // Prefer page-scoped popup detection. Using the browser context's "page" event
+      // can accidentally capture unrelated pages created by other concurrent requests.
+      const popupPromise = page.waitForEvent("popup", { timeout: 8000 }).catch(() => null);
+      const navigationPromise = page
+        .waitForNavigation({ timeout: 8000, waitUntil: "domcontentloaded" })
+        .catch(() => null);
 
-      // If a new tab/window opened, use that; otherwise stay on the current page.
-      const targetPage = maybeNewPage ?? page;
+      try {
+        // Don't let Playwright auto-wait for navigation; we explicitly handle popup vs same-tab.
+        await applyButton.click();
 
-      // Wait for whatever we landed on to finish loading a bit
-      await targetPage.waitForTimeout(7500);
+        // Wait for URL to stabilize (same URL for 3 consecutive checks)
+        const waitForUrlStable = async (targetPage: typeof page, maxWaitMs = 10000, checkIntervalMs = 100, requiredStableChecks = 3) => {
+          let lastUrl = targetPage.url();
+          let stableCount = 0;
+          const startTime = Date.now();
 
-      applicationLink = targetPage.url();
+          while (Date.now() - startTime < maxWaitMs) {
+            await targetPage.waitForTimeout(checkIntervalMs);
+            const currentUrl = targetPage.url();
+            if (currentUrl === lastUrl && !currentUrl.includes("gradcracker")) {
+              stableCount++;
+              if (stableCount >= requiredStableChecks) return currentUrl;
+            } else {
+              stableCount = 1;
+              lastUrl = currentUrl;
+            }
+          }
+          return lastUrl;
+        };
 
-      // Optional sanity check: if the URL is still the original Gradcracker page,
-      // you can decide to treat it as "no external app link found".
-      if (applicationLink === originalUrl) {
-        log.info(
-          `Apply click did not change URL (still Gradcracker): ${applicationLink}`
-        );
-      } else {
-        log.info(`Captured application URL: ${applicationLink}`);
+        await waitForUrlStable(page);
+
+        const maybePopup = await popupPromise;
+        spawnedPage = maybePopup;
+
+        const targetPage = maybePopup ?? page;
+
+        if (maybePopup) {
+          await maybePopup.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => null);
+          // If the popup initially opens as about:blank, give it a moment to redirect.
+          if (maybePopup.url() === "about:blank") {
+            await maybePopup
+              .waitForURL((u) => u.toString() !== "about:blank", { timeout: 15000 })
+              .catch(() => null);
+          }
+        } else {
+          // Same-tab navigation case.
+          await navigationPromise;
+          await page
+            .waitForURL((u) => u.toString() !== originalUrl, { timeout: 15000 })
+            .catch(() => null);
+        }
+
+        applicationLink = targetPage.url();
+
+        if (applicationLink === originalUrl) {
+          log.info(
+            `Apply click did not change URL (still Gradcracker): ${applicationLink}`
+          );
+        } else {
+          log.info(`Captured application URL: ${applicationLink}`);
+        }
+      } finally {
+        // Ensure we don't leak tabs on retries/errors.
+        if (spawnedPage && spawnedPage !== page) {
+          await spawnedPage.close().catch(() => null);
+        }
       }
     } else {
       log.warning(`Apply button not found on page: ${request.url}`);
@@ -189,8 +234,5 @@ router.addHandler(
       applicationLink, // External or same-page URL after click
       jobDescription,
     });
-
-    // close all pages
-    await page.context().close();
   }
 );
