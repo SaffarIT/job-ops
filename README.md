@@ -19,54 +19,50 @@ Live progress is streamed to the UI via Server-Sent Events at `GET /api/pipeline
 
 ```mermaid
 flowchart LR
-  subgraph UI[User Interface]
-    DASH[React Dashboard]
+  subgraph UI["User Interface"]
+    DASH["React Dashboard"]
   end
 
-  subgraph ORCH[Orchestrator (Node/TS)]
-    API[Express API<br/>/api/*]
-    PIPE[Pipeline Runner]
+  subgraph ORCH["Orchestrator (Node/TS)"]
+    API["Express API<br/>/api/*"]
+    PIPE["Pipeline Runner"]
     DB[(SQLite<br/>jobs.db)]
     PDFS[(PDFs<br/>pdfs/)]
   end
 
-  subgraph CRAWL[job-extractor (Crawlee/Playwright)]
-    C1[Seed search URLs<br/>(locations x roles)]
-    C2[Parse list pages<br/>enqueue job pages]
-    C3[Parse job pages<br/>extract JD + apply URL]
+  subgraph CRAWL["job-extractor (Crawlee/Playwright)"]
+    C1["Seed search URLs<br/>(locations x roles)"]
+    C2["Parse list pages<br/>enqueue job pages"]
+    C3["Parse job pages<br/>extract JD + apply URL"]
     DS[(Crawlee dataset<br/>storage/datasets/default)]
   end
 
-  subgraph EXT[External Services]
-    GC[Gradcracker]
-    OR[OpenRouter]
-    RX[rxresu.me]
-    NO[Notion (optional)]
-    N8N[n8n / cron (optional)]
+  subgraph EXT["External Services"]
+    GC["Gradcracker"]
+    OR["OpenRouter"]
+    RX["rxresu.me"]
+    NO["Notion (optional)"]
+    N8N["n8n / cron (optional)"]
   end
 
-  N8N -->|POST /api/webhook/trigger| API
-  DASH -->|REST| API
-  API -->|REST JSON| DASH
-  DASH -->|SSE connect| API
-  API -->|progress events| DASH
+  N8N -->|"POST /api/webhook/trigger"| API
+  DASH <-->|"REST"| API
+  DASH <-->|"SSE progress"| API
 
-  API -->|run pipeline| PIPE
-
-  PIPE -->|spawn| CRAWL
+  PIPE -->|"spawn"| CRAWL
   C1 --> GC
   C2 --> GC
   C3 --> GC
   CRAWL --> DS
-  API -->|read| DS
+  API -->|"read"| DS
   API --> DB
 
-  PIPE -->|score + summary| OR
-  PIPE -->|spawn python| RX
-  RX -->|export| PDFS
-  API -->|serve /pdfs/*| PDFS
+  PIPE -->|"score + summary"| OR
+  PIPE -->|"spawn python"| RX
+  RX -->|"export"| PDFS
+  API -->|"serve /pdfs/*"| PDFS
 
-  API -->|create page| NO
+  API -->|"create page"| NO
 ```
 
 ## Repo layout
