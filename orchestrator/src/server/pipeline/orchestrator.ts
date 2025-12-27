@@ -265,33 +265,70 @@ export async function runPipeline(config: Partial<PipelineConfig> = {}): Promise
     }
 
     progressHelpers.scoringComplete(scoredJobs.length);
-    console.log(`\n📊 Scored ${scoredJobs.length} jobs. Ready for manual processing.`);
+    console.log(`\n📊 Scored ${scoredJobs.length} jobs.`);
+
+    // Step 5: Auto-process top jobs
+    console.log('\n🏭 Auto-processing top jobs...');
+
+    const jobsToProcess = scoredJobs
+      .filter(j => (j.suitabilityScore ?? 0) >= mergedConfig.minSuitabilityScore)
+      .sort((a, b) => (b.suitabilityScore ?? 0) - (a.suitabilityScore ?? 0))
+      .slice(0, mergedConfig.topN);
+
+    console.log(`   Found ${jobsToProcess.length} candidates (score >= ${mergedConfig.minSuitabilityScore}, top ${mergedConfig.topN})`);
+
+    let processedCount = 0;
+
+    if (jobsToProcess.length > 0) {
+      updateProgress({
+        step: 'processing',
+        jobsProcessed: 0,
+        totalToProcess: jobsToProcess.length,
+      });
+
+      for (let i = 0; i < jobsToProcess.length; i++) {
+        const job = jobsToProcess[i];
+        progressHelpers.processingJob(i + 1, jobsToProcess.length, job);
+
+        // Process job (Generate Summary + PDF)
+        // We catch errors here to ensure one failure doesn't stop the whole batch
+        const result = await processJob(job.id);
+
+        if (result.success) {
+          processedCount++;
+        } else {
+          console.warn(`   ⚠️ Failed to process job ${job.id}: ${result.error}`);
+        }
+
+        progressHelpers.jobComplete(i + 1, jobsToProcess.length);
+      }
+    }
 
     // Update pipeline run as completed
     await pipelineRepo.updatePipelineRun(pipelineRun.id, {
       status: 'completed',
       completedAt: new Date().toISOString(),
-      jobsProcessed: 0,
+      jobsProcessed: processedCount,
     });
 
     console.log('\n🎉 Pipeline completed!');
     console.log(`   Jobs discovered: ${created}`);
-    console.log('   Jobs processed: 0 (manual)');
+    console.log(`   Jobs processed: ${processedCount}`);
 
-    progressHelpers.complete(created, 0);
+    progressHelpers.complete(created, processedCount);
 
     await notifyPipelineWebhook('pipeline.completed', {
       pipelineRunId: pipelineRun.id,
       jobsDiscovered: created,
       jobsScored: unprocessedJobs.length,
-      jobsProcessed: 0,
+      jobsProcessed: processedCount,
     })
     isPipelineRunning = false;
 
     return {
       success: true,
       jobsDiscovered: created,
-      jobsProcessed: 0,
+      jobsProcessed: processedCount,
     };
 
   } catch (error) {
