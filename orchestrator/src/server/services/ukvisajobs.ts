@@ -237,6 +237,69 @@ async function loadCachedAuthSession(): Promise<UkVisaJobsAuthSession | null> {
     }
 }
 
+function getAuthToken(session: UkVisaJobsAuthSession | null): string | null {
+    if (!session) return null;
+    return session.authToken || session.token || null;
+}
+
+function hasAuthToken(session: UkVisaJobsAuthSession | null): session is UkVisaJobsAuthSession {
+    return Boolean(session && (session.authToken || session.token));
+}
+
+function isAuthErrorResponse(status: number, bodyText: string): boolean {
+    if (status === 401 || status === 403) return true;
+    if (status !== 400) return false;
+    try {
+        const parsed = JSON.parse(bodyText) as { errorType?: string; message?: string };
+        if (parsed?.errorType === 'expired') return true;
+        if (parsed?.message && parsed.message.toLowerCase().includes('expired')) return true;
+    } catch {
+        // Ignore parse errors
+    }
+    return bodyText.toLowerCase().includes('expired');
+}
+
+async function refreshUkVisaJobsAuthSession(): Promise<void> {
+    const email = process.env.UKVISAJOBS_EMAIL;
+    const password = process.env.UKVISAJOBS_PASSWORD;
+    if (!email || !password) {
+        throw new Error('UK Visa Jobs auth expired. Set UKVISAJOBS_EMAIL and UKVISAJOBS_PASSWORD to refresh.');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const child = spawn('npx', ['tsx', 'src/main.ts'], {
+            cwd: UKVISAJOBS_DIR,
+            stdio: 'inherit',
+            env: {
+                ...process.env,
+                UKVISAJOBS_REFRESH_ONLY: '1',
+            },
+        });
+
+        child.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`UK Visa Jobs auth refresh exited with code ${code}`));
+        });
+        child.on('error', reject);
+    });
+}
+
+async function loadAuthSessionOrRefresh(): Promise<UkVisaJobsAuthSession> {
+    let authSession = await loadCachedAuthSession();
+    if (hasAuthToken(authSession)) {
+        return authSession;
+    }
+
+    await refreshUkVisaJobsAuthSession();
+
+    authSession = await loadCachedAuthSession();
+    if (!hasAuthToken(authSession)) {
+        throw new Error('UK Visa Jobs auth session missing. Set UKVISAJOBS_EMAIL and UKVISAJOBS_PASSWORD to refresh.');
+    }
+
+    return authSession;
+}
+
 /**
  * Clear previous extraction results.
  */
@@ -255,42 +318,58 @@ export async function fetchUkVisaJobsPage(options: { searchKeyword?: string; pag
     pageSize: number;
 }> {
     const page = options.page && options.page > 0 ? options.page : 1;
-    const authSession = await loadCachedAuthSession();
-    const token = authSession?.token || authSession?.authToken;
+    let authSession = await loadAuthSessionOrRefresh();
 
-    if (!token) {
-        throw new Error('UK Visa Jobs auth session missing. Run the extractor to refresh tokens.');
+    const fetchWithSession = async (session: UkVisaJobsAuthSession) => {
+        const token = getAuthToken(session);
+        if (!token) {
+            throw new Error('UK Visa Jobs auth session missing. Set UKVISAJOBS_EMAIL and UKVISAJOBS_PASSWORD to refresh.');
+        }
+
+        const formData = new FormData();
+        formData.append('is_global', '0');
+        formData.append('sortBy', 'desc');
+        formData.append('pageNo', String(page));
+        formData.append('visaAcceptance', 'false');
+        formData.append('applicants_outside_uk', 'false');
+        formData.append('searchKeyword', options.searchKeyword ? options.searchKeyword : 'null');
+        formData.append('token', token);
+
+        const cookies = buildCookieHeader({
+            token: session?.token,
+            authToken: session?.authToken,
+            csrfToken: session?.csrfToken,
+            ciSession: session?.ciSession,
+        });
+
+        const response = await fetch(UKVISAJOBS_API_URL, {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'cookie': cookies,
+                'origin': 'https://my.ukvisajobs.com',
+                'referer': `https://my.ukvisajobs.com/open-jobs/1?is_global=0&sortBy=desc&pageNo=${page}&visaAcceptance=false&applicants_outside_uk=false`,
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            },
+            body: formData,
+        });
+
+        const text = await response.text();
+        return { response, text };
+    };
+
+    let { response, text } = await fetchWithSession(authSession);
+
+    if (!response.ok && isAuthErrorResponse(response.status, text)) {
+        await refreshUkVisaJobsAuthSession();
+        const refreshedSession = await loadCachedAuthSession();
+        if (!hasAuthToken(refreshedSession)) {
+            throw new Error('UK Visa Jobs auth session missing. Set UKVISAJOBS_EMAIL and UKVISAJOBS_PASSWORD to refresh.');
+        }
+        authSession = refreshedSession;
+        ({ response, text } = await fetchWithSession(authSession));
     }
 
-    const formData = new FormData();
-    formData.append('is_global', '0');
-    formData.append('sortBy', 'desc');
-    formData.append('pageNo', String(page));
-    formData.append('visaAcceptance', 'false');
-    formData.append('applicants_outside_uk', 'false');
-    formData.append('searchKeyword', options.searchKeyword ? options.searchKeyword : 'null');
-    formData.append('token', token);
-
-    const cookies = buildCookieHeader({
-        token: authSession?.token,
-        authToken: authSession?.authToken,
-        csrfToken: authSession?.csrfToken,
-        ciSession: authSession?.ciSession,
-    });
-
-    const response = await fetch(UKVISAJOBS_API_URL, {
-        method: 'POST',
-        headers: {
-            'accept': 'application/json, text/plain, */*',
-            'cookie': cookies,
-            'origin': 'https://my.ukvisajobs.com',
-            'referer': `https://my.ukvisajobs.com/open-jobs/1?is_global=0&sortBy=desc&pageNo=${page}&visaAcceptance=false&applicants_outside_uk=false`,
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        body: formData,
-    });
-
-    const text = await response.text();
     if (!response.ok) {
         throw new Error(`UK Visa Jobs API returned ${response.status}: ${text}`);
     }

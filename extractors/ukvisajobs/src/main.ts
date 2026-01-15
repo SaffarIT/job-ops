@@ -10,6 +10,7 @@
  *   UKVISAJOBS_HEADLESS - Set to "false" to show the browser (default: true)
  *   UKVISAJOBS_MAX_JOBS - Maximum jobs to fetch (default: 50, max: 200) - Set via UI Settings
  *   UKVISAJOBS_SEARCH_KEYWORD - Optional search filter
+ *   UKVISAJOBS_REFRESH_ONLY - Set to "1" to refresh tokens and exit
  */
 
 import { mkdir, writeFile, readFile } from 'fs/promises';
@@ -378,8 +379,21 @@ async function main(): Promise<void> {
     console.log('ðŸ‡¬ðŸ‡§ UK Visa Jobs Extractor starting...');
     const credentials = getLoginCredentials();
     const searchKeyword = process.env.UKVISAJOBS_SEARCH_KEYWORD || undefined;
+    const refreshOnly = process.env.UKVISAJOBS_REFRESH_ONLY === '1';
 
     let authSession = await loadCachedAuthSession();
+
+    if (refreshOnly) {
+        if (!credentials) {
+            console.error('ERROR: UKVISAJOBS_EMAIL and UKVISAJOBS_PASSWORD must be set');
+            process.exit(1);
+        }
+        console.log('   Refresh-only mode: logging in to refresh tokens...');
+        authSession = await loginWithBrowser(credentials.email, credentials.password);
+        await saveCachedAuthSession(authSession);
+        console.log('   Auth session refreshed.');
+        return;
+    }
 
     if (!authSession) {
         if (!credentials) {

@@ -290,13 +290,31 @@ export const UkVisaJobsPage: React.FC = () => {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-          <div className="rounded-xl border border-border/60 bg-card/40">
+          <div className="relative rounded-xl border border-border/60 bg-card/40">
+            {isSearching && results.length > 0 && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-background/70 text-sm text-muted-foreground backdrop-blur-sm">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Fetching UK Visa Jobs...</span>
+              </div>
+            )}
             {results.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-                <div className="text-base font-semibold">No results yet</div>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Run a search to fetch fresh UK Visa Jobs listings.
-                </p>
+                {isSearching ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <div className="text-base font-semibold">Searching...</div>
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      Fetching fresh UK Visa Jobs listings.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-base font-semibold">No results yet</div>
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      Run a search to fetch fresh UK Visa Jobs listings.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <>
