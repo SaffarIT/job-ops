@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { formatDate } from "../lib/dateUtils";
 import * as api from "../api";
 import { FitAssessment } from ".";
 import type { Job, ResumeProjectCatalogItem } from "../../shared/types";
@@ -48,22 +49,6 @@ interface DiscoveredPanelProps {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return null;
-  try {
-    const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
-    const parsed = new Date(normalized);
-    if (Number.isNaN(parsed.getTime())) return dateStr;
-    return parsed.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-};
 
 const stripHtml = (value: string) =>
   value

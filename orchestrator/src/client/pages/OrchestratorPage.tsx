@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { copyTextToClipboard, formatJobForWebhook } from "@client/lib/jobCopy";
+import { formatDate, formatDateTime } from "../lib/dateUtils";
 import { PipelineProgress, DiscoveredPanel, ManualImportSheet } from "../components";
 import { ReadyPanel } from "../components/ReadyPanel";
 import * as api from "../api";
@@ -153,43 +154,6 @@ const emptyStateCopy: Record<FilterTab, string> = {
   discovered: "All discovered jobs have been processed.",
   applied: "You have not applied to any jobs yet.",
   all: "No jobs in the system yet. Run the pipeline to get started.",
-};
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return null;
-  try {
-    const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
-    const parsed = new Date(normalized);
-    if (Number.isNaN(parsed.getTime())) return dateStr;
-    return parsed.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-};
-
-const formatDateTime = (dateStr: string | null) => {
-  if (!dateStr) return null;
-  try {
-    const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
-    const parsed = new Date(normalized);
-    if (Number.isNaN(parsed.getTime())) return dateStr;
-    const date = parsed.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-    const time = parsed.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    return `${date} ${time}`;
-  } catch {
-    return dateStr;
-  }
 };
 
 const safeFilenamePart = (value: string) => value.replace(/[^a-z0-9]/gi, "_");
