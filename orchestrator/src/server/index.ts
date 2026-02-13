@@ -18,7 +18,7 @@ async function startServer() {
   await applyStoredEnvOverrides();
 
   const app = createApp();
-  const PORT = Number(process.env.PORT) || 3001;
+  const PORT = Number(process.env.PORT || 3001) || 3001;
 
   // Start server - bind to 0.0.0.0 for Railway compatibility
   app.listen(PORT, "0.0.0.0", async () => {
