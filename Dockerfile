@@ -23,11 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies with pip cache
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
     pip3 install --no-cache-dir --break-system-packages playwright python-jobspy
 
 # Install Firefox for Python Playwright with cache
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
     python3 -m playwright install firefox
 
 # Copy package files for dependency installation
@@ -38,7 +38,7 @@ COPY extractors/gradcracker/package*.json ./extractors/gradcracker/
 COPY extractors/ukvisajobs/package*.json ./extractors/ukvisajobs/
 
 # Install Node dependencies with npm cache (dev deps needed for build)
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm install --workspaces --include-workspace-root --include=dev \
     --no-audit --no-fund --progress=false
 
@@ -94,7 +94,7 @@ COPY extractors/gradcracker/package*.json ./extractors/gradcracker/
 COPY extractors/ukvisajobs/package*.json ./extractors/ukvisajobs/
 
 # Install production Node dependencies only
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm install --workspaces --include-workspace-root --omit=dev \
     --no-audit --no-fund --progress=false
 
