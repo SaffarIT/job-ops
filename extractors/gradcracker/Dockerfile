@@ -8,7 +8,7 @@ FROM apify/actor-node-playwright-chrome:20-1.50.1 AS builder
 COPY --chown=myuser package*.json ./
 
 # Install all dependencies with cache mount for faster rebuilds
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm install --include=dev --audit=false --progress=false
 
 # Next, copy the source files using the user set
@@ -34,7 +34,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
 # Install NPM packages, skip optional and development dependencies to
 # keep the image small. Avoid logging too much and print the dependency
 # tree for debugging
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm --quiet set progress=false \
     && npm install --omit=dev --progress=false \
     && echo "Installed NPM packages:" \
